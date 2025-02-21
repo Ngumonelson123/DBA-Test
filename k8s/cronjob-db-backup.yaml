@@ -1,0 +1,26 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: db-backup-job
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: db-backup
+            image: postgres:15
+            command: ["/bin/sh", "-c"]
+            args:
+              - |
+                PGPASSWORD=$(kubectl get secret pesalink-db-postgresql-ha-postgresql -o jsonpath="{.data.postgres-password}" | base64 --decode)
+                pg_dump -U postgres -h pesalink-db-postgresql-ha-pgpool.default.svc.cluster.local -d pesalink_db > /backups/pesalink_db_backup_$(date +\%F-\%H\%M\%S).sql
+            volumeMounts:
+            - mountPath: "/backups"
+              name: backup-storage
+          restartPolicy: OnFailure
+          volumes:
+          - name: backup-storage
+            persistentVolumeClaim:
+              claimName: backup-pvc 
