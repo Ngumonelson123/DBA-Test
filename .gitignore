@@ -1,0 +1,4 @@
+echo "minikube-linux-amd64" >> .gitignore
+git add .gitignore
+git commit -m "Updated .gitignore to exclude minikube-linux-amd64"
+git push origin master
