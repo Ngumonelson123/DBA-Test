@@ -2,12 +2,13 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: generate-data-job
+  namespace: mynamespace
 spec:
   template:
     spec:
       containers:
       - name: data-generator
-        image: python:3.12
+        image: bitnami/python:3.12
         resources:
           requests:
             memory: "256Mi"
@@ -15,21 +16,31 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: pg-cluster-postgresql-ha-postgresql
+              key: password
         command: ["sh", "-c"]
         args:
           - |
-            pip install psycopg2 faker &&
-            python3 <<EOF
+            pip install psycopg2-binary faker &&
+            echo "🔄 Running data generation script..."
+
+            python3 - <<EOF
             import psycopg2
+            import os
             from faker import Faker
             import random
-            import os
 
             # PostgreSQL connection details
-            DB_HOST = "postgresql-cluster-postgresql-ha-postgresql-0.postgresql-cluster-postgresql-ha-postgresql-headless.default.svc.cluster.local"
+            DB_HOST = "pg-cluster-postgresql-ha-pgpool.mynamespace.svc.cluster.local"
             DB_PORT = "5432"
             DB_NAME = "pesalink_db"
             DB_USER = "postgres"
+
+            # ✅ Get password from environment variable (fixes fe_sendauth error)
             DB_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 
             fake = Faker()
@@ -38,7 +49,9 @@ spec:
 
             try:
                 print("🔄 Connecting to PostgreSQL...")
-                conn = psycopg2.connect(host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASSWORD)
+                conn = psycopg2.connect(
+                    host=DB_HOST, port=DB_PORT, database=DB_NAME, user=DB_USER, password=DB_PASSWORD
+                )
                 cur = conn.cursor()
                 print("✅ Connected to PostgreSQL.")
 
@@ -50,7 +63,7 @@ spec:
                 else:
                     remaining_users = 100000 - user_count
                     print(f"🔄 Generating {remaining_users} users...")
-                    
+
                     user_batch = []
                     for _ in range(remaining_users):
                         email = fake.unique.email()
@@ -76,10 +89,4 @@ spec:
                     conn.close()
                     print("🔌 PostgreSQL connection closed.")
             EOF
-        env:
-        - name: POSTGRES_PASSWORD
-          valueFrom:
-            secretKeyRef:
-              name: pesalink-db-secret
-              key: password
       restartPolicy: Never
